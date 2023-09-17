@@ -1,0 +1,145 @@
+//Define your database schema in models/Post.js and models/Comment.js
+const mongoose = require('mongoose');
+
+const postSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true,
+  },
+  caption: {
+    type: String,
+    required: true,
+  },
+  comments: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Comment',
+    },
+  ],
+});
+
+module.exports = mongoose.model('Post', postSchema);
+
+const mongoose = require('mongoose');
+
+const commentSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true,
+  },
+  postId: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true,
+  },
+  text: {
+    type: String,
+    required: true,
+  },
+});
+
+module.exports = mongoose.model('Comment', commentSchema);
+
+
+//Set up your Express.js application in app.js
+
+const express = require('express');
+const mongoose = require('mongoose');
+const bodyParser = require('body-parser');
+const app = express();
+
+mongoose.connect('mongodb://localhost/instagram-clone', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
+
+app.use(bodyParser.json());
+
+// Import your routes here
+const postRoutes = require('./routes/posts');
+const commentRoutes = require('./routes/comments');
+
+// Use your routes
+app.use('/posts', postRoutes);
+app.use('/comments', commentRoutes);
+
+app.listen(3000, () => {
+  console.log('Server is running on port 3000');
+});
+
+//Create the routes for posts and comments in separate files under the routes directory 
+
+const express = require('express');
+const router = express.Router();
+const Post = require('../models/Post');
+
+// Create a new post
+router.post('/', async (req, res) => {
+  try {
+    const post = new Post(req.body);
+    await post.save();
+    res.status(201).json(post);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Delete a post by ID
+router.delete('/:postId', async (req, res) => {
+  try {
+    const postId = req.params.postId;
+    await Post.findByIdAndDelete(postId);
+    res.status(204).send();
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+module.exports = router;
+
+const express = require('express');
+const router = express.Router();
+const Comment = require('../models/Comment');
+const Post = require('../models/Post');
+
+// Create a new comment on a post
+router.post('/', async (req, res) => {
+  try {
+    const { userId, postId, text } = req.body;
+    const comment = new Comment({ userId, postId, text });
+    await comment.save();
+
+    // Update the post's comments array
+    await Post.findByIdAndUpdate(postId, { $push: { comments: comment._id } });
+
+    res.status(201).json(comment);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Delete a comment by ID
+router.delete('/:commentId', async (req, res) => {
+  try {
+    const commentId = req.params.commentId;
+    const comment = await Comment.findById(commentId);
+
+    if (!comment) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    // Check if the user deleting the comment is the one who created it
+    if (comment.userId === req.body.userId) {
+      await Comment.findByIdAndDelete(commentId);
+      res.status(204).send();
+    } else {
+      res.status(403).json({ error: 'You do not have permission to delete this comment' });
+    }
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+module.exports = router;
+
+
+
